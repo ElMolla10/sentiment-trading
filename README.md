@@ -247,3 +247,32 @@ All hyperparameters live in `sentiment_trading/config.py`:
 ## Dataset
 
 [FinancialPhraseBank](https://huggingface.co/datasets/takala/financial_phrasebank) (`sentences_50agree`) — 4,840 English-language financial news sentences with three-class sentiment labels (negative / neutral / positive) annotated by 16 domain experts. Class distribution: ~12 % negative, ~59 % neutral, ~28 % positive.
+
+---
+
+## Safety & Constraints
+
+This system is designed for research and strategy prototyping. Before deploying in a live trading environment, the following constraints must be understood and explicitly accepted.
+
+### What the system does well
+- Automatic benchmarking eliminates the most catastrophic failure mode: a below-random sentiment source silently integrated into a live pipeline. The 81.7 pp best–worst gap makes this non-negotiable.
+- Multiplicative modulation is magnitude-bounded: even a maximally confident sentiment score (`|s| = 1`) can at most double or zero out the base signal — it cannot flip its direction or produce runaway values.
+- Graceful degradation guarantees `final = p` whenever sentiment is unavailable, so the trading logic degrades to its base signal rather than failing open.
+
+### Known limitations
+
+| # | Constraint | Risk if ignored |
+|---|-----------|-----------------|
+| 1 | **Linear scaling only.** The formula uses `(1 ± \|s\|)` scaling. Market reactions to news — especially around earnings, central bank announcements, or macro surprises — are empirically nonlinear. | Underweights tail events; overweights routine news. |
+| 2 | **English-only sentiment.** Models are fine-tuned on English financial text. Sentiment from non-English news sources is unscored and silently treated as neutral (`s = 0`). | May systematically misprice assets whose primary news flow is non-English. |
+| 3 | **Single-domain evaluation.** Benchmarks are run on FinancialPhraseBank (equity-market news sentences). Generalisation to foreign exchange, fixed income, commodities, or social-media text is unvalidated. | Reported accuracy figures do not transfer to other asset classes without re-benchmarking. |
+| 4 | **Fixed decay constant τ = 90 min.** The exponential decay `exp(−dt / τ)` uses a single constant derived from published intraday studies, not estimated per-instrument. Highly liquid assets (e.g. S&P 500 futures) may decay faster; illiquid assets slower. | Mis-timed attenuation; stale sentiment treated as fresh or vice versa. |
+| 5 | **Modulation strength not jointly calibrated.** The `\|s\|` weight is the sentiment model's own probability calibration. No separate modulation-strength hyperparameter is jointly estimated with the base forecaster. | Suboptimal blending ratio between price and sentiment signals. |
+| 6 | **Automatic selection requires a representative validation set.** `ModelSelector` picks the best model on the held-out split. If that split is stale, class-imbalanced, or domain-shifted, the selected model may not be the best for the live distribution. | Selection is only as good as the validation data it runs on; refresh periodically. |
+
+### Recommended safeguards before live deployment
+
+1. **Re-benchmark on your own corpus** — do not rely solely on FinancialPhraseBank results if your strategy ingests a different news source.
+2. **Cap modulation magnitude** — consider clipping `|s|` to e.g. 0.5 until live performance is validated, limiting the maximum amplification to 1.5× rather than 2×.
+3. **Monitor for sentiment drift** — schedule `python main.py benchmark --force` on a regular cadence to detect silent model degradation before it affects capital.
+4. **Paper-trade first** — validate the full pipeline in simulation with realistic latency and slippage before routing live orders.
