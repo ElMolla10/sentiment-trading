@@ -247,9 +247,3 @@ All hyperparameters live in `sentiment_trading/config.py`:
 ## Dataset
 
 [FinancialPhraseBank](https://huggingface.co/datasets/takala/financial_phrasebank) (`sentences_50agree`) — 4,840 English-language financial news sentences with three-class sentiment labels (negative / neutral / positive) annotated by 16 domain experts. Class distribution: ~12 % negative, ~59 % neutral, ~28 % positive.
-
----
-
-## License
-
-MIT
